@@ -393,7 +393,7 @@ void showhelp()	{
 	printf("-f format\tOutput format <publickey, rmd160, address>. Default: publickey\n");
 	printf("-l look\t\tOutput <compress, uncompress>. Default: compress\n");
 	printf("-n number\tNumber of publikeys to be geneted, this numbe will be even\n");
-	printf("-o file\t\tOutput file, if you omit this option the out will go to the standar output\n");
+	printf("-o file\t\tOutput file, default: keys.txt\n");
 	printf("-p key\t\tPublickey to be substracted compress or uncompress\n");
 	printf("-r A:B\t\trange A to B\n");
 	printf("-R\t\tSet the publickey substraction Random instead of secuential\n");
