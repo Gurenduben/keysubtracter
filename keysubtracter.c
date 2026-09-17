@@ -253,15 +253,9 @@ int main(int argc, char **argv)  {
 			}
 		}
 		else	{
-			mpz_cdiv_q_ui(base_key,diff,M);
-			Scalar_Multiplication(G,&base_publickey,base_key);
-			mpz_set(sum_publickey.x,base_publickey.x);
-			mpz_set(sum_publickey.y,base_publickey.y);
-			mpz_set(sum_key,base_key);
-			for(i = 0; i < M;i++)	{
-				Point_Negation(&sum_publickey,&negated_publickey);
-				Point_Addition(&sum_publickey,&target_publickey,&dst_publickey);
-				
+			mpz_set(sum_key,min_range);
+			for(i = 0; i < N && mpz_cmp(sum_key,max_range) <= 0;i++)	{
+				Scalar_Multiplication(G,&dst_publickey,sum_key);
 				switch(FLAG_FORMART)	{
 					case 0: //Publickey
 						generate_strpublickey(&dst_publickey,FLAG_LOOK == 0,str_publickey);
@@ -269,101 +263,37 @@ int main(int argc, char **argv)  {
 							fprintf(OUTPUT,"%s\n",str_publickey);
 						}
 						else	{
-							gmp_fprintf(OUTPUT,"%s # - %Zd\n",str_publickey,sum_key);
+							gmp_fprintf(OUTPUT,"%s # %Zd\n",str_publickey,sum_key);
 						}
-					if(mpz_cmp(dst_publickey.x,target_publickey.x) == 0 && mpz_cmp(dst_publickey.y,target_publickey.y) == 0)	{
-						gmp_fprintf(stderr,"[+] Private key found: %Zx\n",sum_key);
-						found = 1;
-					}
-					Point_Addition(&negated_publickey,&target_publickey,&dst_publickey);
-					generate_strpublickey(&dst_publickey,FLAG_LOOK == 0,str_publickey);
-					if(FLAG_HIDECOMMENT)	{
-						fprintf(OUTPUT,"%s\n",str_publickey);
-					}
-					else	{
-						gmp_fprintf(OUTPUT,"%s # + %Zd\n",str_publickey,sum_key);
-					}
-					if(mpz_cmp(dst_publickey.x,target_publickey.x) == 0 && mpz_cmp(dst_publickey.y,target_publickey.y) == 0)	{
-						mpz_sub(private_key_found,EC.n,sum_key);
-						gmp_fprintf(stderr,"[+] Private key found: %Zx\n",private_key_found);
-						found = 1;
-						}
-				break;
-				case 1: //rmd160
-					generate_strrmd160(&dst_publickey,FLAG_LOOK == 0,str_rmd160);
-					if(FLAG_HIDECOMMENT)	{
-						fprintf(OUTPUT,"%s\n",str_rmd160);
-					}
-					else	{
-						gmp_fprintf(OUTPUT,"%s # - %Zd\n",str_rmd160,sum_key);
-					}
-					Point_Addition(&negated_publickey,&target_publickey,&dst_publickey);
-					generate_strrmd160(&dst_publickey,FLAG_LOOK == 0,str_rmd160);
+					break;
+					case 1: //rmd160
+						generate_strrmd160(&dst_publickey,FLAG_LOOK == 0,str_rmd160);
 						if(FLAG_HIDECOMMENT)	{
-						fprintf(OUTPUT,"%s\n",str_rmd160);
+							fprintf(OUTPUT,"%s\n",str_rmd160);
 						}
 						else	{
-						gmp_fprintf(OUTPUT,"%s # + %Zd\n",str_rmd160,sum_key);
+							gmp_fprintf(OUTPUT,"%s # %Zd\n",str_rmd160,sum_key);
 						}
-				break;
-				case 2:	//address
-					generate_straddress(&dst_publickey,FLAG_LOOK == 0,str_address);
-					if(FLAG_HIDECOMMENT)	{
-						fprintf(OUTPUT,"%s\n",str_address);
-					}
-					else	{
-						gmp_fprintf(OUTPUT,"%s # - %Zd\n",str_address,sum_key);
-					}
-					Point_Addition(&negated_publickey,&target_publickey,&dst_publickey);
-					generate_straddress(&dst_publickey,FLAG_LOOK == 0,str_address);
-					if(FLAG_HIDECOMMENT)	{
-						fprintf(OUTPUT,"%s\n",str_address);
-					}
-					else	{
-						gmp_fprintf(OUTPUT,"%s # + %Zd\n",str_address,sum_key);
-					}
-				break;
+					break;
+					case 2:	//address
+						generate_straddress(&dst_publickey,FLAG_LOOK == 0,str_address);
+						if(FLAG_HIDECOMMENT)	{
+							fprintf(OUTPUT,"%s\n",str_address);
+						}
+						else	{
+							gmp_fprintf(OUTPUT,"%s # %Zd\n",str_address,sum_key);
+						}
+					break;
 				}
-				
-				Point_Addition(&sum_publickey,&base_publickey,&dst_publickey);
-				mpz_set(sum_publickey.x,dst_publickey.x);
-				mpz_set(sum_publickey.y,dst_publickey.y);
-				mpz_add(sum_key,sum_key,base_key);
-				if(found)	{
-				break;
+				if(mpz_cmp(dst_publickey.x,target_publickey.x) == 0 && mpz_cmp(dst_publickey.y,target_publickey.y) == 0)	{
+					gmp_fprintf(stderr,"[+] Private key found: %Zx\n",sum_key);
+					found = 1;
+					break;
 				}
+				mpz_add_ui(sum_key,sum_key,1);
 			}
-			
 			if(!found)	{
-				switch(FLAG_FORMART)	{
-				case 0: //Publickey
-					generate_strpublickey(&target_publickey,FLAG_LOOK == 0,str_publickey);
-					if(FLAG_HIDECOMMENT)	{
-						fprintf(OUTPUT,"%s\n",str_publickey);
-					}
-					else	{
-						fprintf(OUTPUT,"%s # target\n",str_publickey);
-					}
-				break;
-				case 1: //rmd160
-					generate_strrmd160(&target_publickey,FLAG_LOOK == 0,str_rmd160);
-					if(FLAG_HIDECOMMENT)	{
-						fprintf(OUTPUT,"%s\n",str_rmd160);
-					}
-					else	{
-						fprintf(OUTPUT,"%s # target\n",str_rmd160);
-					}
-				break;
-				case 2:	//address
-					generate_straddress(&target_publickey,FLAG_LOOK == 0,str_address);
-					if(FLAG_HIDECOMMENT)	{
-						fprintf(OUTPUT,"%s\n",str_address);
-					}
-					else	{
-						fprintf(OUTPUT,"%s # target\n",str_address);
-					}
-				break;
-				}
+				fprintf(stderr,"[-] Private key not found in the specified range\n");
 			}
 		}
 		
