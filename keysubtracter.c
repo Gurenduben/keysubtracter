@@ -66,7 +66,7 @@ gmp_randstate_t state;
 
 int main(int argc, char **argv)  {
 	FILE *OUTPUT;
-	char c;
+	int c;
 	uint64_t i = 0;
 	mpz_init_set_str(EC.p, EC_constant_P, 16);
 	mpz_init_set_str(EC.n, EC_constant_N, 16);
