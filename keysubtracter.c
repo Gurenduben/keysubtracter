@@ -37,6 +37,7 @@ void set_look(char *param);
 void set_bit(char *param);
 void set_publickey(char *param);
 void set_range(char *param);
+void prompt_missing_options();
 void generate_straddress(struct Point *publickey,bool compress,char *dst);
 void generate_strrmd160(struct Point *publickey,bool compress,char *dst);
 void generate_strpublickey(struct Point *publickey,bool compress,char *dst);
@@ -126,6 +127,7 @@ int main(int argc, char **argv)  {
 			break;
 		}
 	}
+	prompt_missing_options();
 	if((FLAG_BIT || FLAG_RANGE) && FLAG_PUBLIC && FLAG_N)	{
 		if(str_output)	{
 			OUTPUT = fopen(str_output,"a");
@@ -378,8 +380,42 @@ void showhelp()	{
 	printf("-p key\t\tPublickey to be substracted compress or uncompress\n");
 	printf("-r A:B\t\trange A to B\n");
 	printf("-R\t\tSet the publickey substraction Random instead of secuential\n");
-	printf("-x\t\tExclude comment\n\n");
+	printf("-x\t\tExclude comment\n");
+	printf("If -p, -b/-r or -n are omitted, the program will prompt for them interactively.\n\n");
 	printf("Developed by albertobsd\n\n");
+}
+
+void prompt_missing_options()	{
+	char buffer[256];
+	if(!FLAG_PUBLIC)	{
+		printf("Enter the public key (compress or uncompress): ");
+		fflush(stdout);
+		if(fgets(buffer,sizeof(buffer),stdin) != NULL)	{
+			set_publickey(buffer);
+			FLAG_PUBLIC = 1;
+		}
+	}
+	if(!FLAG_BIT && !FLAG_RANGE)	{
+		printf("Enter the bit range (e.g. 32, 160): ");
+		fflush(stdout);
+		if(fgets(buffer,sizeof(buffer),stdin) != NULL)	{
+			buffer[strcspn(buffer,"\n")] = 0;
+			set_bit(buffer);
+			FLAG_BIT = 1;
+		}
+	}
+	if(!FLAG_N)	{
+		printf("Enter how many public keys to generate: ");
+		fflush(stdout);
+		if(fgets(buffer,sizeof(buffer),stdin) != NULL)	{
+			N = strtol(buffer,NULL,10);
+			if(N <= 0)	{
+				fprintf(stderr,"[E] invalid N number %s\n",buffer);
+				exit(0);
+			}
+			FLAG_N = 1;
+		}
+	}
 }
 
 void set_bit(char *param)	{
