@@ -7,7 +7,7 @@ Post: https://bitcointalk.org/index.php?topic=5360656.0
 
 Download, clone this repository:
 
-`git clone https://github.com/albertobsd/keysubtracter.git`
+`git clone https://github.com/gurenduben/keysubtracter.git`
 
 Compile:
 

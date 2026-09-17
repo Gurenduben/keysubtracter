@@ -382,7 +382,7 @@ void showhelp()	{
 	printf("-R\t\tSet the publickey substraction Random instead of secuential\n");
 	printf("-x\t\tExclude comment\n");
 	printf("If -p, -b/-r or -n are omitted, the program will prompt for them interactively.\n\n");
-	printf("Developed by albertobsd\n\n");
+	printf("Developed by gurenduben\n\n");
 }
 
 void prompt_missing_options()	{
