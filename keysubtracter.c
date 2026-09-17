@@ -562,7 +562,7 @@ void generate_strpublickey(struct Point *publickey,bool compress,char *dst)	{
 
 void generate_strrmd160(struct Point *publickey,bool compress,char *dst)	{
 	char str_publickey[131];
-	char bin_publickey[65];
+	unsigned char bin_publickey[65];
 	char bin_sha256[32];
 	char bin_rmd160[20];
 	memset(dst,0,42);
@@ -587,7 +587,7 @@ void generate_strrmd160(struct Point *publickey,bool compress,char *dst)	{
 
 void generate_straddress(struct Point *publickey,bool compress,char *dst)	{
 	char str_publickey[131];
-	char bin_publickey[65];
+	unsigned char bin_publickey[65];
 	char bin_sha256[32];
 	char bin_digest[60];
 	size_t pubaddress_size = 42;
