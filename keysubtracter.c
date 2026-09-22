@@ -21,7 +21,7 @@ email: alberto.bsd@gmail.com
 #include "sha256/sha256.h"
 
 
-const char *version = "0.1.20210918";
+const char *version = "0.2.20260922";
 const char *EC_constant_N = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141";
 const char *EC_constant_P = "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f";
 const char *EC_constant_Gx = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -30,6 +30,19 @@ const char *EC_constant_Gy = "483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c
 
 const char *formats[3] = {"publickey","rmd160","address"};
 const char *looks[2] = {"compress","uncompress"};
+
+/*
+	Slot of the in memory table used to find the generated publickeys,
+	Only the x coordinate is needed to identify a publickey, the y parity
+	completes the point.
+*/
+struct match_slot	{
+	char x[65];		//x coordinate of the generated publickey in hexadecimal
+	char privatekey[65];	//privatekey of the generated publickey in hexadecimal
+	uint64_t index;		//position of that key in the generation sequence
+	uint8_t used;		//1 when the slot contains a key
+	uint8_t odd;		//Y oddness of the generated publickey
+};
 
 void showhelp();
 void set_format(char *param);
@@ -41,12 +54,20 @@ void prompt_missing_options();
 void generate_straddress(struct Point *publickey,bool compress,char *dst);
 void generate_strrmd160(struct Point *publickey,bool compress,char *dst);
 void generate_strpublickey(struct Point *publickey,bool compress,char *dst);
+void set_privatekey(char *param);
+void generate_and_match();
+uint64_t hash_x(char *x);
+struct match_slot *match_find(struct match_slot *table,uint64_t mask,char *x,uint8_t odd);
+void match_add(struct match_slot *table,uint64_t mask,char *x,char *privatekey,uint8_t odd,uint64_t index);
+void show_progress(uint64_t current,uint64_t total);
+int isliveoutput();
 
 char *str_output = "keys.txt";
 
-char str_publickey[131];
-char str_rmd160[41];
-char str_address[41];
+/* The formatters clear 132 and 42 bytes on those buffers */
+char str_publickey[132];
+char str_rmd160[42];
+char str_address[42];
 
 struct Point target_publickey,base_publickey,sum_publickey,negated_publickey,dst_publickey;
 
@@ -59,9 +80,12 @@ int FLAG_HIDECOMMENT = 0;
 int FLAG_LOOK = 0;
 int FLAG_MODE = 0;
 int FLAG_N;
+int FLAG_PRIVATE = 0;
+int FLAG_OUTPUT = 0;
+int FLAG_MATCHALL = 0;
 uint64_t N = 0,M;
 
-mpz_t min_range,max_range,diff,TWO,base_key,sum_key,dst_key,private_key_found;
+mpz_t min_range,max_range,diff,TWO,base_key,sum_key,dst_key,private_key_found,base_privatekey;
 gmp_randstate_t state;
 
 int main(int argc, char **argv)  {
@@ -70,6 +94,7 @@ int main(int argc, char **argv)  {
 	int found = 0;
 	uint64_t i = 0;
 	mpz_init(private_key_found);
+	mpz_init(base_privatekey);
 	mpz_init_set_str(EC.p, EC_constant_P, 16);
 	mpz_init_set_str(EC.n, EC_constant_N, 16);
 	mpz_init_set_str(G.x , EC_constant_Gx, 16);
@@ -82,10 +107,13 @@ int main(int argc, char **argv)  {
 	mpz_init_set_ui(TWO,2);
 	mpz_init(target_publickey.x);
 	mpz_init_set_ui(target_publickey.y,0);
-	while ((c = getopt(argc, argv, "hvxRb:n:o:p:r:f:l:")) != -1) {
+	while ((c = getopt(argc, argv, "hvxRab:n:o:p:r:f:l:k:")) != -1) {
 		switch(c) {
 			case 'x':
 				FLAG_HIDECOMMENT = 1;
+			break;
+			case 'a':
+				FLAG_MATCHALL = 1;
 			break;
 			case 'h':
 				showhelp();
@@ -105,6 +133,7 @@ int main(int argc, char **argv)  {
 			break;
 			case 'o':
 				str_output = (char *)optarg;
+				FLAG_OUTPUT = 1;
 			break;
 			case 'p':
 				set_publickey((char *)optarg);
@@ -127,10 +156,17 @@ int main(int argc, char **argv)  {
 			case 'f':
 				set_format((char *)optarg);
 			break;
+			case 'k':
+				set_privatekey((char *)optarg);
+				FLAG_PRIVATE = 1;
+			break;
 		}
 	}
 	prompt_missing_options();
-	if((FLAG_BIT || FLAG_RANGE) && FLAG_PUBLIC && FLAG_N)	{
+	if(FLAG_PRIVATE)	{
+		generate_and_match();
+	}
+	else if((FLAG_BIT || FLAG_RANGE) && FLAG_PUBLIC && FLAG_N)	{
 		if(str_output)	{
 			OUTPUT = fopen(str_output,"a");
 			if(OUTPUT == NULL)	{
@@ -319,8 +355,14 @@ int main(int argc, char **argv)  {
 
 void showhelp()	{
 	printf("\nUsage:\n-h\t\tshow this help\n");
+	printf("-a\t\tWith -k do not stop on the first match, look for all of them\n");
 	printf("-b bits\t\tFor some puzzles you only need a bit range\n");
 	printf("-f format\tOutput format <publickey, rmd160, address>. Default: publickey\n");
+	printf("-k key\t\tGenerate -n private/publickey pairs from that privatekey and\n");
+	printf("\t\tsubstract them from the -p publickey until one of the generated\n");
+	printf("\t\tpublickeys is reached, nothing is stored, the keys are printed to\n");
+	printf("\t\tthe stdout while they are generated, with -R the offsets\n");
+	printf("\t\tspace is set with -r A:B or -b bits\n");
 	printf("-l look\t\tOutput <compress, uncompress>. Default: compress\n");
 	printf("-n number\tNumber of publikeys to be geneted, this numbe will be even\n");
 	printf("-o file\t\tOutput file, default: keys.txt\n");
@@ -342,7 +384,7 @@ void prompt_missing_options()	{
 			FLAG_PUBLIC = 1;
 		}
 	}
-	if(!FLAG_BIT && !FLAG_RANGE)	{
+	if(!FLAG_BIT && !FLAG_RANGE && !FLAG_PRIVATE)	{
 		printf("Enter the bit range (e.g. 32, 160): ");
 		fflush(stdout);
 		if(fgets(buffer,sizeof(buffer),stdin) != NULL)	{
@@ -568,4 +610,281 @@ void generate_straddress(struct Point *publickey,bool compress,char *dst)	{
 	if(!b58enc(dst,&pubaddress_size,bin_digest,25)){
 		fprintf(stderr,"error b58enc\n");
 	}
+}
+
+/*
+	Read the base privatekey used to generate the keys with the -k parameter
+*/
+void set_privatekey(char *param)	{
+	char *dest;
+	int len;
+	len = strlen(param);
+	dest = (char*) calloc(len+1,1);
+	if(dest == NULL)	{
+		fprintf(stderr,"[E] Error calloc\n");
+		exit(0);
+	}
+	memcpy(dest,param,len);
+	dest[len] = '\0';
+	trim(dest," \t\n\r");
+	if(dest[0] == '0' && (dest[1] == 'x' || dest[1] == 'X'))	{
+		memmove(dest,dest+2,strlen(dest) - 1);
+	}
+	if(strlen(dest) == 0 || !isValidHex(dest))	{
+		fprintf(stderr,"[E] Invalid privatekey, expected an hexadecimal value: %s\n",param);
+		exit(0);
+	}
+	if(mpz_set_str(base_privatekey,dest,16) != 0)	{
+		fprintf(stderr,"[E] Invalid privatekey: %s\n",param);
+		exit(0);
+	}
+	free(dest);
+	if(mpz_cmp_ui(base_privatekey,0) <= 0 || mpz_cmp(base_privatekey,EC.n) >= 0)	{
+		fprintf(stderr,"[E] The privatekey must be greater than 0 and lower than the curve order\n");
+		gmp_fprintf(stderr,"[E] Curve order: %Zx\n",EC.n);
+		exit(0);
+	}
+}
+
+/*
+	FNV-1a of the x coordinate, the table of generated publickeys is indexed
+	by that value
+*/
+uint64_t hash_x(char *x)	{
+	uint64_t hash = 14695981039346656037ULL;
+	while(*x)	{
+		hash ^= (uint64_t) (unsigned char) *x++;
+		hash *= 1099511628211ULL;
+	}
+	return hash;
+}
+
+/*
+	Look for a generated publickey, the x coordinate and the y oddness identify
+	an unique point, return NULL when the publickey was not generated
+*/
+struct match_slot *match_find(struct match_slot *table,uint64_t mask,char *x,uint8_t odd)	{
+	uint64_t position = hash_x(x) & mask;
+	while(table[position].used)	{
+		if(table[position].odd == odd && strcmp(table[position].x,x) == 0)	{
+			return &table[position];
+		}
+		position = (position + 1) & mask;
+	}
+	return NULL;
+}
+
+/*
+	Add a generated publickey to the table, the table is always at least the
+	double of the requested keys so it always has a free slot
+*/
+void match_add(struct match_slot *table,uint64_t mask,char *x,char *privatekey,uint8_t odd,uint64_t index)	{
+	uint64_t position = hash_x(x) & mask;
+	while(table[position].used)	{
+		position = (position + 1) & mask;
+	}
+	memcpy(table[position].x,x,65);
+	memcpy(table[position].privatekey,privatekey,65);
+	table[position].odd = odd;
+	table[position].index = index;
+	table[position].used = 1;
+}
+
+int isliveoutput()	{
+	return isatty(fileno(stderr));
+}
+
+void show_progress(uint64_t current,uint64_t total)	{
+	if(isliveoutput())	{
+		fprintf(stderr,"\r[+] keys generated and checked: %llu/%llu",(unsigned long long) current,(unsigned long long) total);
+	}
+	else	{
+		fprintf(stderr,"[+] keys generated and checked: %llu/%llu\n",(unsigned long long) current,(unsigned long long) total);
+	}
+	fflush(stderr);
+}
+
+/*
+	Generate N public/privatekey pairs from one base privatekey and substract
+	every generated publickey from the publickey given by the user (-p) until
+	the result of a substraction is one of the generated publickeys, that means
+	until the publickey given by the user is the addition of two generated keys.
+	The keys are generated sequentially (basekey, basekey+1, basekey+2, ...) or
+	with a random offset when -R is used.
+	The generated keys are never stored in a file, they are just printed to the
+	stdout while they are generated, in memory every generated publickey is kept,
+	indexed by its x coordinate together with its privatekey, to be able to find
+	the matches.
+*/
+void generate_and_match()	{
+	struct match_slot *table,*match;
+	struct Point generated_publickey,negated_publickey,difference_publickey,check_publickey;
+	char str_x[65],str_privatekey[65],str_publicdata[132];
+	mpz_t offset,privatekey,target_privatekey,random_range;
+	uint64_t i,count = 0,hits = 0,table_size = 1024,mask,progress;
+	uint8_t odd;
+	int duplicated;
+	clock_t begin;
+	if(!FLAG_PUBLIC)	{
+		fprintf(stderr,"[E] The -p publickey is required to substract the generated publickeys\n");
+		exit(0);
+	}
+	if(!FLAG_N || N == 0)	{
+		fprintf(stderr,"[E] The -n number of keys to generate is required\n");
+		exit(0);
+	}
+	mpz_init(offset);
+	mpz_init(privatekey);
+	mpz_init(target_privatekey);
+	mpz_init(random_range);
+	mpz_init(generated_publickey.x);
+	mpz_init(generated_publickey.y);
+	mpz_init(negated_publickey.x);
+	mpz_init(negated_publickey.y);
+	mpz_init(difference_publickey.x);
+	mpz_init(difference_publickey.y);
+	mpz_init(check_publickey.x);
+	mpz_init(check_publickey.y);
+	while(table_size < (N * 2))	{
+		table_size <<= 1;
+		if(table_size == 0)	{
+			fprintf(stderr,"[E] Too many keys requested: %llu\n",(unsigned long long) N);
+			exit(0);
+		}
+	}
+	table = (struct match_slot*) calloc(table_size,sizeof(struct match_slot));
+	if(table == NULL)	{
+		fprintf(stderr,"[E] Error calloc, not enough memory to index %llu keys\n",(unsigned long long) N);
+		exit(0);
+	}
+	mask = table_size - 1;
+
+	gmp_fprintf(stderr,"[+] Base privatekey: %064Zx\n",base_privatekey);
+	fprintf(stderr,"[+] Keys to generate and check: %llu\n",(unsigned long long) N);
+	if(FLAG_OUTPUT)	{
+		fprintf(stderr,"[+] This mode never stores the keys, the -o option is ignored\n");
+	}
+	if(FLAG_RANDOM)	{
+		gmp_randinit_mt(state);
+		gmp_randseed_ui(state,((int)clock()) + ((int)time(NULL)));
+		if(FLAG_RANGE || FLAG_BIT)	{
+			mpz_sub(random_range,max_range,min_range);
+			if(mpz_cmp_ui(random_range,N) < 0)	{
+				fprintf(stderr,"[E] The random offset range has less values than the keys requested with -n\n");
+				exit(0);
+			}
+			gmp_fprintf(stderr,"[+] Generation: random offsets between %Zx and %Zx, a bigger space than -n avoids repeated generations\n",min_range,max_range);
+		}
+		else	{
+			mpz_set_ui(random_range,N);
+			mpz_mul_ui(random_range,random_range,4);
+			gmp_fprintf(stderr,"[+] Generation: random offsets between 0 and %Zx, use -r A:B or -b bits to change that space\n",random_range);
+		}
+	}
+	else	{
+		fprintf(stderr,"[+] Generation: sequential offsets from 0 to %llu\n",(unsigned long long) (N - 1));
+	}
+	fprintf(stderr,"[+] Nothing is stored, the generated keys are only printed to the stdout\n");
+
+	progress = N / (isliveoutput() ? 100 : 10);
+	if(progress == 0)	{
+		progress = 1;
+	}
+	begin = clock();
+	for(i = 0;i < N;i++)	{
+		if(FLAG_RANDOM)	{
+			/*
+				Random offsets, a key that was already generated is generated
+				again until a new one appears
+			*/
+			do	{
+				mpz_urandomm(offset,state,random_range);
+				if(FLAG_RANGE || FLAG_BIT)	{
+					mpz_add(offset,offset,min_range);
+				}
+				mpz_add(privatekey,base_privatekey,offset);
+				mpz_mod(privatekey,privatekey,EC.n);
+				Scalar_Multiplication(G,&generated_publickey,privatekey);
+				gmp_snprintf(str_x,65,"%064Zx",generated_publickey.x);
+				odd = (uint8_t) mpz_tstbit(generated_publickey.y,0);
+				duplicated = (match_find(table,mask,str_x,odd) != NULL);
+			}	while(duplicated);
+		}
+		else	{
+			mpz_set_ui(offset,i);
+			mpz_add(privatekey,base_privatekey,offset);
+			mpz_mod(privatekey,privatekey,EC.n);
+			Scalar_Multiplication(G,&generated_publickey,privatekey);
+			gmp_snprintf(str_x,65,"%064Zx",generated_publickey.x);
+			odd = (uint8_t) mpz_tstbit(generated_publickey.y,0);
+		}
+		count++;
+		gmp_snprintf(str_privatekey,65,"%064Zx",privatekey);
+		switch(FLAG_FORMART)	{
+			case 1:	//rmd160
+				generate_strrmd160(&generated_publickey,FLAG_LOOK == 0,str_publicdata);
+			break;
+			case 2:	//address
+				generate_straddress(&generated_publickey,FLAG_LOOK == 0,str_publicdata);
+			break;
+			default:	//publickey
+				generate_strpublickey(&generated_publickey,FLAG_LOOK == 0,str_publicdata);
+			break;
+		}
+		if(FLAG_HIDECOMMENT)	{
+			fprintf(stdout,"%s %s\n",str_privatekey,str_publicdata);
+		}
+		else	{
+			fprintf(stdout,"%s %s # %llu\n",str_privatekey,str_publicdata,(unsigned long long) (i + 1));
+		}
+		/*
+			The generated publickey and its privatekey are the only things that
+			remain in memory, the key is indexed before the substraction so a
+			key with the double of the privatekey of another one is found too
+		*/
+		match_add(table,mask,str_x,str_privatekey,odd,i);
+		Point_Negation(&generated_publickey,&negated_publickey);
+		Point_Addition(&target_publickey,&negated_publickey,&difference_publickey);
+		gmp_snprintf(str_x,65,"%064Zx",difference_publickey.x);
+		match = match_find(table,mask,str_x,(uint8_t) mpz_tstbit(difference_publickey.y,0));
+		if(match != NULL)	{
+			hits++;
+			gmp_fprintf(stderr,"[+] Match: target publickey minus generated key #%llu is the generated key #%llu\n",(unsigned long long) (i + 1),(unsigned long long) (match->index + 1));
+			fprintf(stderr,"[+]   generated privatekey #%llu: %s\n",(unsigned long long) (match->index + 1),match->privatekey);
+			fprintf(stderr,"[+]   generated privatekey #%llu: %s\n",(unsigned long long) (i + 1),str_privatekey);
+			mpz_set_str(target_privatekey,match->privatekey,16);
+			mpz_add(target_privatekey,target_privatekey,privatekey);
+			mpz_mod(target_privatekey,target_privatekey,EC.n);
+			Scalar_Multiplication(G,&check_publickey,target_privatekey);
+			if(mpz_cmp(check_publickey.x,target_publickey.x) == 0 && mpz_cmp(check_publickey.y,target_publickey.y) == 0)	{
+				gmp_fprintf(stderr,"[+] Privatekey of the target publickey: %064Zx verified\n",target_privatekey);
+			}
+			else	{
+				fprintf(stderr,"[E] The privatekey of the target publickey can not be verified\n");
+			}
+			if(!FLAG_MATCHALL)	{
+				break;
+			}
+		}
+		if((count % progress) == 0)	{
+			show_progress(count,N);
+		}
+	}
+	fprintf(stderr,"%s[+] %llu keys generated and checked in %.2f seconds\n",isliveoutput() ? "\r" : "",(unsigned long long) count,(double) (clock() - begin) / CLOCKS_PER_SEC);
+	if(hits == 0)	{
+		fprintf(stderr,"[-] No match: the target publickey is not the addition of two of the generated publickeys\n");
+	}
+	free(table);
+	mpz_clear(offset);
+	mpz_clear(privatekey);
+	mpz_clear(target_privatekey);
+	mpz_clear(random_range);
+	mpz_clear(generated_publickey.x);
+	mpz_clear(generated_publickey.y);
+	mpz_clear(negated_publickey.x);
+	mpz_clear(negated_publickey.y);
+	mpz_clear(difference_publickey.x);
+	mpz_clear(difference_publickey.y);
+	mpz_clear(check_publickey.x);
+	mpz_clear(check_publickey.y);
 }

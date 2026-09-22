@@ -66,6 +66,79 @@ You can use it in any program that accept multiple publickeys for cracking, kang
 
 Yes with `-R` but is a slow method because it use Scalar multiplication instead Point Addition
 
+## Generate publickeys from a privatekey and substract them from a publickey
+
+With the parameter `-k privatekey` the program generates the `-n` private/publickey
+pairs of that privatekey and substracts every generated publickey from the publickey
+given with `-p` until the result of a substraction is one of the generated publickeys,
+that means until the publickey given with `-p` is found to be the **addition of two of
+the generated publickeys**, when that happens the privatekey of the `-p` publickey is
+the addition of the two privatekeys that produced it and it is printed verified.
+
+The keys are generated:
+
+- sequentially `privatekey, privatekey+1, privatekey+2, ... privatekey+n-1`
+- with a random offset `privatekey + random offset` when the parameter `-R` is used, the random offsets space is `0:4n` by default and it can be set with `-r A:B` or `-b bits` (those two parameters only affect the random generation)
+
+**Nothing is stored**, no file is written (the `-o` parameter is ignored in this mode)
+and the generated privatekeys and publickeys are only printed to the stdout while they
+are generated, if you want to keep them just redirect the stdout to a file.
+The generation stops as soon as a match is found, use the parameter `-a` to generate
+and check all the requested `-n` keys and print all the matches instead of the first one.
+
+Example, 20 sequential keys from the privatekey `1`, the privatekey `4` plus the
+privatekey `5` are the privatekey `9` so the publickey of the privatekey `9` is
+reached with 5 generated keys:
+
+`./keysubtracter -k 1 -p 03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe -n 20`
+
+```
+0000000000000000000000000000000000000000000000000000000000000001 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798 # 1
+0000000000000000000000000000000000000000000000000000000000000002 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5 # 2
+0000000000000000000000000000000000000000000000000000000000000003 02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9 # 3
+0000000000000000000000000000000000000000000000000000000000000004 02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13 # 4
+0000000000000000000000000000000000000000000000000000000000000005 022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4 # 5
+[+] Match: target publickey minus generated key #5 is the generated key #4
+[+]   generated privatekey #4: 0000000000000000000000000000000000000000000000000000000000000004
+[+]   generated privatekey #5: 0000000000000000000000000000000000000000000000000000000000000005
+[+] Privatekey of the target publickey: 0000000000000000000000000000000000000000000000000000000000000009 verified
+```
+
+The lines with the `[+]` prefix are the search information and they are printed to the
+stderr, the keys are printed to the stdout, the comments with the number of every key
+can be removed with `-x`.
+
+Example with random offsets, `-r 1:21` is the offsets space 1 to 32 in hexadecimal and
+because the 32 requested keys are all the possible offsets they are all generated but
+in a random order, here the privatekey `6` plus the privatekey `7` are the privatekey
+`13`:
+
+`./keysubtracter -k 1 -n 32 -R -r 1:21 -p 03f28773c2d975288bc7d1d205c3748651b075fbc6610e58cddeeddf8f19405aa8`
+
+```
+000000000000000000000000000000000000000000000000000000000000000a 03a0434d9e47f3c86235477c7b1ae6ae5d3442d49b1943c2b752a68e2a47e247c7 # 1
+000000000000000000000000000000000000000000000000000000000000001c 0255eb67d7b7238a70a7fa6f64d5dc3c826b31536da6eb344dc39a66f904f97968 # 2
+0000000000000000000000000000000000000000000000000000000000000016 03421f5fc9a21065445c96fdb91c0c1e2f2431741c72713b4b99ddcb316f31e9fc # 3
+...
+0000000000000000000000000000000000000000000000000000000000000006 03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556 # 11
+0000000000000000000000000000000000000000000000000000000000000007 025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc # 21
+[+] Match: target publickey minus generated key #21 is the generated key #11
+[+]   generated privatekey #11: 0000000000000000000000000000000000000000000000000000000000000006
+[+]   generated privatekey #21: 0000000000000000000000000000000000000000000000000000000000000007
+[+] Privatekey of the target publickey: 000000000000000000000000000000000000000000000000000000000000000d verified
+```
+
+Because a privatekey can be the addition of more than two pairs of the generated
+privatekeys, the parameter `-a` prints every match, for example the publickey of the
+privatekey `21` is the addition of 10 different pairs of the first 20 keys of the
+privatekey `1`:
+
+`./keysubtracter -k 1 -p 02352bbf4a4cdd12564f93fa332ce333301d9ad40271f8107181340aef25be59d5 -n 20 -a`
+
+How much memory is used? the generated publickeys and privatekeys are indexed in
+memory by the x coordinate of the publickey, around 145 bytes per generated key,
+nothing is written to the disk.
+
 ## Generate hashes rmd160 of the publickey
 With the parameter `-f rmd160` you can select the format of the output
 
