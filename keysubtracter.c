@@ -21,7 +21,7 @@ email: alberto.bsd@gmail.com
 #include "sha256/sha256.h"
 
 
-const char *version = "0.2.20260922";
+const char *version = "0.3.20260926";
 const char *EC_constant_N = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141";
 const char *EC_constant_P = "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f";
 const char *EC_constant_Gx = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -61,6 +61,8 @@ struct match_slot *match_find(struct match_slot *table,uint64_t mask,char *x,uin
 void match_add(struct match_slot *table,uint64_t mask,char *x,char *privatekey,uint8_t odd,uint64_t index);
 void show_progress(uint64_t current,uint64_t total);
 int isliveoutput();
+uint64_t system_ram();
+void format_bytes(uint64_t bytes,char *dst,size_t dst_size);
 
 char *str_output = "keys.txt";
 
@@ -363,6 +365,9 @@ void showhelp()	{
 	printf("\t\tpublickeys is reached, nothing is stored, the keys are printed to\n");
 	printf("\t\tthe stdout while they are generated, with -R the offsets\n");
 	printf("\t\tspace is set with -r A:B or -b bits\n");
+	printf("\t\tThe estimated RAM needed for the -n keys and the system\n");
+	printf("\t\tRAM are printed before the generation, a warning is shown\n");
+	printf("\t\twhen the estimated RAM needed does not fit\n");
 	printf("-l look\t\tOutput <compress, uncompress>. Default: compress\n");
 	printf("-n number\tNumber of publikeys to be geneted, this numbe will be even\n");
 	printf("-o file\t\tOutput file, default: keys.txt\n");
@@ -705,6 +710,32 @@ void show_progress(uint64_t current,uint64_t total)	{
 }
 
 /*
+	Total physical RAM of the system in bytes, 0 when it can not be determined
+*/
+uint64_t system_ram()	{
+	long pages = sysconf(_SC_PHYS_PAGES);
+	long page_size = sysconf(_SC_PAGESIZE);
+	if(pages <= 0 || page_size <= 0)	{
+		return 0;
+	}
+	return (uint64_t) pages * (uint64_t) page_size;
+}
+
+/*
+	Write the given number of bytes in the dst buffer in a human readable way
+*/
+void format_bytes(uint64_t bytes,char *dst,size_t dst_size)	{
+	static const char *units[5] = {"B","KB","MB","GB","TB"};
+	double value = (double) bytes;
+	int unit = 0;
+	while(value >= 1024 && unit < 4)	{
+		value /= 1024;
+		unit++;
+	}
+	snprintf(dst,dst_size,"%.2f %s",value,units[unit]);
+}
+
+/*
 	Generate N public/privatekey pairs from one base privatekey and substract
 	every generated publickey from the publickey given by the user (-p) until
 	the result of a substraction is one of the generated publickeys, that means
@@ -719,9 +750,9 @@ void show_progress(uint64_t current,uint64_t total)	{
 void generate_and_match()	{
 	struct match_slot *table,*match;
 	struct Point generated_publickey,negated_publickey,difference_publickey,check_publickey;
-	char str_x[65],str_privatekey[65],str_publicdata[132];
+	char str_x[65],str_privatekey[65],str_publicdata[132],str_bytes[64];
 	mpz_t offset,privatekey,target_privatekey,random_range;
-	uint64_t i,count = 0,hits = 0,table_size = 1024,mask,progress;
+	uint64_t i,count = 0,hits = 0,table_size = 1024,mask,progress,ram_needed = 0,ram_total = 0;
 	uint8_t odd;
 	int duplicated;
 	clock_t begin;
@@ -752,9 +783,32 @@ void generate_and_match()	{
 			exit(0);
 		}
 	}
+	/*
+		The RAM needed is the table that keeps one slot per generated publickey,
+		that table is at least the double of the requested keys
+	*/
+	if(table_size > (UINT64_MAX / sizeof(struct match_slot)))	{
+		fprintf(stderr,"[E] Too many keys requested: %llu, the size of the table overflows\n",(unsigned long long) N);
+		exit(0);
+	}
+	ram_needed = table_size * sizeof(struct match_slot);
+	format_bytes(ram_needed,str_bytes,sizeof(str_bytes));
+	fprintf(stderr,"[+] Estimated RAM needed: %s (%llu bytes), %llu bytes per slot for %llu slots\n",str_bytes,(unsigned long long) ram_needed,(unsigned long long) sizeof(struct match_slot),(unsigned long long) table_size);
+	ram_total = system_ram();
+	if(ram_total > 0)	{
+		format_bytes(ram_total,str_bytes,sizeof(str_bytes));
+		fprintf(stderr,"[+] System RAM: %s (%llu bytes)\n",str_bytes,(unsigned long long) ram_total);
+		if(ram_needed > ram_total)	{
+			fprintf(stderr,"[W] The estimated RAM needed is bigger than the system RAM, the allocation can fail, use a lower -n value\n");
+		}
+	}
+	else	{
+		fprintf(stderr,"[W] The system RAM can not be determined, the estimated RAM needed is %llu bytes\n",(unsigned long long) ram_needed);
+	}
 	table = (struct match_slot*) calloc(table_size,sizeof(struct match_slot));
 	if(table == NULL)	{
-		fprintf(stderr,"[E] Error calloc, not enough memory to index %llu keys\n",(unsigned long long) N);
+		format_bytes(ram_needed,str_bytes,sizeof(str_bytes));
+		fprintf(stderr,"[E] Error calloc, not enough memory to index %llu keys, %s (%llu bytes) are needed\n",(unsigned long long) N,str_bytes,(unsigned long long) ram_needed);
 		exit(0);
 	}
 	mask = table_size - 1;
