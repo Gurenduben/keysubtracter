@@ -136,8 +136,19 @@ privatekey `1`:
 `./keysubtracter -k 1 -p 02352bbf4a4cdd12564f93fa332ce333301d9ad40271f8107181340aef25be59d5 -n 20 -a`
 
 How much memory is used? the generated publickeys and privatekeys are indexed in
-memory by the x coordinate of the publickey, around 145 bytes per generated key,
-nothing is written to the disk.
+memory by the x coordinate of the publickey, every slot of that table uses 152 bytes
+and the table is at least the double of the requested `-n` keys, nothing is written
+to the disk.
+
+Before the generation starts the size of that table is printed as `Estimated RAM
+needed` together with the `System RAM` of the machine, a warning is shown when the
+estimated RAM needed does not fit in the system RAM and the memory needed is
+reported again when the allocation fails:
+
+```
+[+] Estimated RAM needed: 152.00 KB (155648 bytes), 152 bytes per slot for 1024 slots
+[+] System RAM: 3.85 GB (4131278848 bytes)
+```
 
 ## Generate hashes rmd160 of the publickey
 With the parameter `-f rmd160` you can select the format of the output
