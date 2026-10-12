@@ -135,15 +135,18 @@ privatekey `1`:
 
 `./keysubtracter -k 1 -p 02352bbf4a4cdd12564f93fa332ce333301d9ad40271f8107181340aef25be59d5 -n 20 -a`
 
-How much memory is used? the generated publickeys and privatekeys are indexed in
+How much memory is used? In the `-k` mode the generated publickeys and privatekeys are indexed in
 memory by the x coordinate of the publickey, every slot of that table uses 152 bytes
 and the table is at least the double of the requested `-n` keys, nothing is written
 to the disk.
 
-Before the generation starts the size of that table is printed as `Estimated RAM
-needed` together with the `System RAM` of the machine, a warning is shown when the
-estimated RAM needed does not fit in the system RAM and the memory needed is
-reported again when the allocation fails:
+In the other modes (`-p` with `-b` or `-r`) the keys are written while they are generated and
+none of them is kept in memory, so the estimated RAM needed for the keys is 0 bytes.
+
+Before the generation starts, in every mode, the `Estimated RAM needed` is printed together
+with the `System RAM` of the machine, a warning is shown when the estimated RAM needed does
+not fit in the system RAM and, in the `-k` mode, the memory needed is reported again when the
+allocation fails:
 
 ```
 [+] Estimated RAM needed: 152.00 KB (155648 bytes), 152 bytes per slot for 1024 slots

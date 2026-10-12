@@ -62,6 +62,7 @@ void match_add(struct match_slot *table,uint64_t mask,char *x,char *privatekey,u
 void show_progress(uint64_t current,uint64_t total);
 int isliveoutput();
 uint64_t system_ram();
+void show_system_ram(uint64_t ram_needed);
 void format_bytes(uint64_t bytes,char *dst,size_t dst_size);
 
 char *str_output = "keys.txt";
@@ -183,6 +184,12 @@ int main(int argc, char **argv)  {
 			N++;
 		}
 		M = N /2;
+		/*
+			In this mode every key is written while it is generated and none of them
+			is kept in memory, so the RAM needed for the keys is 0 bytes
+		*/
+		fprintf(stderr,"[+] Estimated RAM needed: 0.00 B (0 bytes), the %llu keys are written while they are generated, none of them is kept in memory\n",(unsigned long long) N);
+		show_system_ram(0);
 		mpz_sub(diff,max_range,min_range);
 		mpz_init(base_publickey.x);
 		mpz_init(base_publickey.y);
@@ -366,8 +373,8 @@ void showhelp()	{
 	printf("\t\tthe stdout while they are generated, with -R the offsets\n");
 	printf("\t\tspace is set with -r A:B or -b bits\n");
 	printf("\t\tThe estimated RAM needed for the -n keys and the system\n");
-	printf("\t\tRAM are printed before the generation, a warning is shown\n");
-	printf("\t\twhen the estimated RAM needed does not fit\n");
+	printf("\t\tRAM are printed before the generation in every mode, a warning\n");
+	printf("\t\tis shown when the estimated RAM needed does not fit\n");
 	printf("-l look\t\tOutput <compress, uncompress>. Default: compress\n");
 	printf("-n number\tNumber of publikeys to be geneted, this numbe will be even\n");
 	printf("-o file\t\tOutput file, default: keys.txt\n");
@@ -710,6 +717,24 @@ void show_progress(uint64_t current,uint64_t total)	{
 }
 
 /*
+	Print the System RAM and warn when the RAM needed does not fit in it
+*/
+void show_system_ram(uint64_t ram_needed)	{
+	char str_bytes[64];
+	uint64_t ram_total = system_ram();
+	if(ram_total > 0)	{
+		format_bytes(ram_total,str_bytes,sizeof(str_bytes));
+		fprintf(stderr,"[+] System RAM: %s (%llu bytes)\n",str_bytes,(unsigned long long) ram_total);
+		if(ram_needed > ram_total)	{
+			fprintf(stderr,"[W] The estimated RAM needed is bigger than the system RAM, the allocation can fail, use a lower -n value\n");
+		}
+	}
+	else	{
+		fprintf(stderr,"[W] The system RAM can not be determined, the estimated RAM needed is %llu bytes\n",(unsigned long long) ram_needed);
+	}
+}
+
+/*
 	Total physical RAM of the system in bytes, 0 when it can not be determined
 */
 uint64_t system_ram()	{
@@ -752,7 +777,7 @@ void generate_and_match()	{
 	struct Point generated_publickey,negated_publickey,difference_publickey,check_publickey;
 	char str_x[65],str_privatekey[65],str_publicdata[132],str_bytes[64];
 	mpz_t offset,privatekey,target_privatekey,random_range;
-	uint64_t i,count = 0,hits = 0,table_size = 1024,mask,progress,ram_needed = 0,ram_total = 0;
+	uint64_t i,count = 0,hits = 0,table_size = 1024,mask,progress,ram_needed = 0;
 	uint8_t odd;
 	int duplicated;
 	clock_t begin;
@@ -794,17 +819,7 @@ void generate_and_match()	{
 	ram_needed = table_size * sizeof(struct match_slot);
 	format_bytes(ram_needed,str_bytes,sizeof(str_bytes));
 	fprintf(stderr,"[+] Estimated RAM needed: %s (%llu bytes), %llu bytes per slot for %llu slots\n",str_bytes,(unsigned long long) ram_needed,(unsigned long long) sizeof(struct match_slot),(unsigned long long) table_size);
-	ram_total = system_ram();
-	if(ram_total > 0)	{
-		format_bytes(ram_total,str_bytes,sizeof(str_bytes));
-		fprintf(stderr,"[+] System RAM: %s (%llu bytes)\n",str_bytes,(unsigned long long) ram_total);
-		if(ram_needed > ram_total)	{
-			fprintf(stderr,"[W] The estimated RAM needed is bigger than the system RAM, the allocation can fail, use a lower -n value\n");
-		}
-	}
-	else	{
-		fprintf(stderr,"[W] The system RAM can not be determined, the estimated RAM needed is %llu bytes\n",(unsigned long long) ram_needed);
-	}
+	show_system_ram(ram_needed);
 	table = (struct match_slot*) calloc(table_size,sizeof(struct match_slot));
 	if(table == NULL)	{
 		format_bytes(ram_needed,str_bytes,sizeof(str_bytes));
