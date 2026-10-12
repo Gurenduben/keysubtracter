@@ -1,3 +1,7 @@
+# Unreleased
+- The `Estimated RAM needed` and the `System RAM` are printed before the generation in every mode, not only in the `-k` mode
+- In the normal mode the keys are written while they are generated, so the estimated RAM needed for them is 0 bytes
+
 # Version 0.3.20260926
 - In the `-k` mode the `Estimated RAM needed` for the requested `-n` keys and the `System RAM` are printed before the generation starts
 - A warning is shown when the estimated RAM needed does not fit in the system RAM
