@@ -1,4 +1,9 @@
 # Unreleased
+- In the `-k` mode the program now checks if the `-p` publickey is the addition of 10 or more distinct generated publickeys, every generated publickey is used at most once and all the `-n` keys are generated before the search
+- Added the `-m number` parameter for the `-k` mode, it sets the minimum number of distinct generated publickeys that must be added, it is 10 by default and `-m 2` searches the additions of two keys first
+- With `-a` every addition found is printed, also with different numbers of keys
+- Sequential keys and random keys in a small offsets span are searched with a BSGS interval search, the other cases use a meet in the middle search
+- Added the `-F` parameter for the `-k` mode, it forces a number of keys whose search is over the safety limit of 4194304 table entries or combinations, those numbers of keys are skipped and reported as not searched when `-F` is not used
 - The `Estimated RAM needed` and the `System RAM` are printed before the generation in every mode, not only in the `-k` mode
 - In the normal mode the keys are written while they are generated, so the estimated RAM needed for them is 0 bytes
 
