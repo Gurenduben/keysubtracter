@@ -13,6 +13,17 @@ Compile:
 
 `make`
 
+This needs a C compiler and the GMP library with its headers, for example
+`libgmp-dev` on Debian or Ubuntu. It creates the `./keysubtracter` program.
+
+Quick start, to check if a target publickey is the addition of 10 or more
+publickeys generated from a base privatekey (see
+[How to use it](#how-to-use-it) for the full instructions):
+
+```bash
+./keysubtracter -k 1 -p 02caf754272dc84563b0352b7a14311af55d245315ace27c65369e15f7151d41d1 -n 20
+```
+
 ## Make copies of any publickey
 
 This copies are generated at different offset of the orginal publickey.
@@ -66,7 +77,7 @@ You can use it in any program that accept multiple publickeys for cracking, kang
 
 Yes with `-R` but is a slow method because it use Scalar multiplication instead Point Addition
 
-## Generate publickeys from a privatekey and substract them from a publickey
+## Check if a publickey is the addition of 10 or more generated publickeys
 
 With the parameter `-k privatekey` the program generates the `-n` private/publickey
 pairs of that privatekey and checks if the publickey given with `-p` is the
@@ -83,6 +94,70 @@ The keys are generated:
 
 - sequentially `privatekey, privatekey+1, privatekey+2, ... privatekey+n-1`
 - with a random offset `privatekey + random offset` when the parameter `-R` is used, the random offsets space is `0:4n` by default and it can be set with `-r A:B` or `-b bits` (those two parameters only affect the random generation)
+
+### How to use it
+
+The basic command is:
+
+```bash
+./keysubtracter -k <base privatekey> -p <target publickey> -n <number of keys> [-m <minimum keys to add>]
+```
+
+Step by step:
+
+1. Compile the program once with `make`, this creates `./keysubtracter`.
+2. Choose the base privatekey for `-k`. The generated privatekeys are made
+   from it: with no other parameter they are the base, base+1, base+2, ...,
+   with `-R` they are the base plus a random offset.
+3. Put the publickey you want to test in `-p`, in compressed or uncompressed
+   format, and how many private/publickey pairs to generate and check in `-n`.
+   `-n` must be at least the minimum in `-m`, if it is smaller the program
+   reports that not enough keys were generated.
+4. Run the command. All the `-n` keys are generated first (a match can use
+   any of them), then every number of keys from `-m` to `-n` is searched in
+   increasing order. The search stops on the first match, unless `-a` is used.
+5. Read the result: on a match the program prints which generated keys are
+   added, their privatekeys, and the privatekey of the `-p` publickey
+   verified. That privatekey is the sum of the listed generated privatekeys
+   modulo the curve order.
+
+| Parameter | Use in this mode |
+| --- | --- |
+| `-k hex` | Base privatekey the generated keys are made from |
+| `-p publickey` | Publickey to check, compressed or uncompressed |
+| `-n number` | How many private/publickey pairs to generate and check |
+| `-m number` | Minimum number of distinct generated publickeys that must be added, 10 by default, the additions of two keys are searched first with `-m 2` |
+| `-R` | Generate with random offsets instead of sequentially |
+| `-r A:B` / `-b bits` | Offset space for the random generation with `-R`, the values of `-r` are hexadecimal |
+| `-a` | Do not stop on the first match, print every match, also with different numbers of keys |
+| `-F` | Force the numbers of keys whose search is over the safety limit (see below), can need a lot of RAM and time |
+| `-f format` / `-l look` / `-x` | Output format of the generated keys, compressed or uncompressed, and hide the comments |
+| `-o file` | Ignored in this mode, no file is written |
+
+The generated keys are printed to the stdout as
+`<privatekey> <generated data> # <number of the key>`, the search information
+is printed to the stderr with the `[+]` prefix. To keep the keys, redirect the
+stdout to a file, with the search information in another file if you want:
+
+```bash
+./keysubtracter -k 1 -p 02caf754272dc84563b0352b7a14311af55d245315ace27c65369e15f7151d41d1 -n 20 > generated_keys.txt 2> search.txt
+```
+
+Keeping the generated keys is important with `-R`: a new run generates
+different random offsets, so the numbers of the keys in a match only have
+meaning together with the keys printed by that same run.
+
+To change how many keys must be added, for example at least 15:
+
+```bash
+./keysubtracter -k <base privatekey> -p <target publickey> -n 100 -m 15
+```
+
+If the result is `No match`, no set of `-m` to `-n` distinct generated keys
+adds up to the target publickey. If instead some numbers of keys are reported
+as `not searched` because their search is too big, the run did not prove that
+there is no match: use a lower `-n`, sequential keys or a smaller random
+offset space, or force those searches with `-F`.
 
 **Nothing is stored**, no file is written (the `-o` parameter is ignored in this mode)
 and the generated privatekeys and publickeys are only printed to the stdout while they
@@ -264,3 +339,11 @@ In case of hit one privatekey the information that you need to calculate the tar
 - range `-r A:B` or bit number `-b number`
 - number of items requested `-n number`
 - privatekey found
+
+In the `-k` mode the information of a match is:
+- base privatekey `-k privatekey`
+- original publickey target `-p publickey`
+- number of items requested `-n number`
+- minimum number of keys added `-m number` (10 if it is not given)
+- with `-R`, the range `-r A:B` or bit number `-b number` and the generated
+  keys printed by that run, because a new run generates different random keys
