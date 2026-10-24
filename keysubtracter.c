@@ -463,22 +463,33 @@ void showhelp()	{
 	printf("-r A:B\t\trange A to B\n");
 	printf("-R\t\tSet the publickey substraction Random instead of secuential\n");
 	printf("-x\t\tExclude comment\n");
-	printf("If -p, -b/-r or -n are omitted, the program will prompt for them interactively.\n\n");
+	printf("If any of -p, -k, -b/-r, -n or -R are omitted, the program will prompt for them\n");
+	printf("interactively: the public key, the starting private key, the bits, the number\n");
+	printf("of keys to generate and whether the search is random or sequential.\n\n");
 	printf("Developed by gurenduben\n\n");
 }
 
 void prompt_missing_options()	{
 	char buffer[256];
 	if(!FLAG_PUBLIC)	{
-		printf("Enter the public key (compress or uncompress): ");
+		printf("Enter the public key you are looking to get the private key to (compress or uncompress): ");
 		fflush(stdout);
 		if(fgets(buffer,sizeof(buffer),stdin) != NULL)	{
 			set_publickey(buffer);
 			FLAG_PUBLIC = 1;
 		}
 	}
-	if(!FLAG_BIT && !FLAG_RANGE && !FLAG_PRIVATE)	{
-		printf("Enter the bit range (e.g. 32, 160): ");
+	if(!FLAG_PRIVATE)	{
+		printf("Enter the private key to start from (hex): ");
+		fflush(stdout);
+		if(fgets(buffer,sizeof(buffer),stdin) != NULL)	{
+			buffer[strcspn(buffer,"\n")] = 0;
+			set_privatekey(buffer);
+			FLAG_PRIVATE = 1;
+		}
+	}
+	if(!FLAG_BIT && !FLAG_RANGE)	{
+		printf("Enter the bits (e.g. 32, 160, used as the random offset range when random search is chosen): ");
 		fflush(stdout);
 		if(fgets(buffer,sizeof(buffer),stdin) != NULL)	{
 			buffer[strcspn(buffer,"\n")] = 0;
@@ -487,15 +498,29 @@ void prompt_missing_options()	{
 		}
 	}
 	if(!FLAG_N)	{
-		printf("Enter how many public keys to generate: ");
+		printf("Enter the number of keys to generate: ");
 		fflush(stdout);
 		if(fgets(buffer,sizeof(buffer),stdin) != NULL)	{
+			buffer[strcspn(buffer,"\n")] = 0;
 			N = strtol(buffer,NULL,10);
 			if(N <= 0)	{
 				fprintf(stderr,"[E] invalid N number %s\n",buffer);
 				exit(0);
 			}
 			FLAG_N = 1;
+		}
+	}
+	if(!FLAG_RANDOM)	{
+		int answer;
+		printf("Random or sequential search? [r/s] (default sequential): ");
+		fflush(stdout);
+		if(fgets(buffer,sizeof(buffer),stdin) != NULL)	{
+			buffer[strcspn(buffer,"\n")] = 0;
+			trim(buffer," \t\r");
+			answer = buffer[0];
+			if(answer == 'r' || answer == 'R')	{
+				FLAG_RANDOM = 1;
+			}
 		}
 	}
 }
